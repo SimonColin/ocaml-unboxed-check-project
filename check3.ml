@@ -2,7 +2,7 @@ type tyvar = Var of string;;
 type tyname = Name of string;;
 type mode = Sep | Ind;;
 
-type ty = Unit | Int | Float | Bool | Char | Arrow of (ty * ty) | Cons of (ty * ty) | Tyvar of tyvar | Param of (tyvar list * tyname) | Exists of tyvar * ty;;
+type ty = Unit | Int | Float | Bool | Char | Arrow of (ty * ty) | Cons of (ty * ty) | Tyvar of tyvar | Param of (ty list * tyname) | Exists of tyvar * ty;;
 
 type context = (tyvar * mode) list;;
 
@@ -17,11 +17,11 @@ let rec print_ty (u : ty) =
     | Cons (a, b) -> let _ = aux a in let _ = print_string " : " in aux b
     | Tyvar (Var a) -> print_string a
     | Param (a, b) -> let print c d = let _ = print_string "param" in
-                                      let _ = (List.iter (fun (Var x) -> print_string x) c)
-                                         in let _ = begin match d with Name s -> print_string s end
-                                            in let _ = (print_string "(")
-                                               in let _ = (aux u)
-                                                  in print_string ")\n"
+                                      let _ = (List.iter (fun x -> print_ty x) c) in
+                                      let _ = begin match d with Name s -> print_string s end in
+                                      let _ = (print_string "(")
+                                      in let _ = (aux u)
+                                         in print_string ")\n"
                       in (print a b)
     | Exists (a, b) -> let _ = print_string "exists"
                        in let _ = begin match a with Var c -> print_string c end
@@ -46,7 +46,7 @@ let rec rand_ty a =
                             | 1 -> (Arrow (rand_ty a, rand_ty a))
                             | 2 -> (Cons (rand_ty a, rand_ty a))
                             | 3 -> (Tyvar (Var " a "))
-                            | 4 -> (Param ((Var " b " :: Var " c " :: []), Name "e"))
+                            | 4 -> (Param ((Tyvar (Var " b ") :: Arrow (Int, Float) :: []), Name "e"))
                             | 5 -> (Exists ((Var "c"), rand_ty ()))
                             | _ -> Int;;
 
@@ -69,7 +69,7 @@ let rec tynames n = match n with
   | [] -> []
   | Def (tm, tyn, t, _) :: b -> tyn :: tynames b;; *)
 
-let getmode (c : context) (t : tyvar) = if List.mem (t, Sep) c then Sep else
+let get_mode (c : context) (t : tyvar) = if List.mem (t, Sep) c then Sep else
                                        Ind;;
 (*
 let getmodefromdef (d : def list) (t : tyvar) (a : ty) =
@@ -78,50 +78,64 @@ let getmodefromdef (d : def list) (t : tyvar) (a : ty) =
                             if List.mem (t, Sep) tym then Sep else Ind
   with Not_found -> assert false;; *)
 
-let getdef (tofind : tyname) (defs : def list) =
+let get_def (tofind : tyname) (defs : def list) =
   List.find (fun (Def (_, name, _, _)) -> name = tofind);;
 
-let rec replacedef (defs : def list) (olddef : def) (newdef :def) =
+let rec replace_def (defs : def list) (olddef : def) (newdef :def) =
   match defs with
   | [] -> []
   | hd :: tl when hd = olddef -> newdef :: tl
-  | hd :: tl -> hd :: (replacedef tl olddef newdef);;
+  | hd :: tl -> hd :: (replace_def tl olddef newdef);;
 
-let rec updatedef (d : def) (l : tyvar list) =
+let rec update_def (d : def) (l : tyvar list) =
   match d with Def (tym, name, bod, mode) -> Def ((List.map (fun (a, b) -> if List.mem a l then (a, Sep) else (a, b)) tym), name, bod, mode);;
 
-let gettyvarmode (name : tyname) (defs : def list) =
+let get_ty_mode (name : tyname) (defs : def list) =
   match (List.find (fun (Def (_, x, _, _)) -> name = x) defs) with Def(tym, _, _, _) -> tym;;
 
 
 
-let rec checkargs (par : tyvar list) (d : (tyvar * mode) list) (ctx : context) =
-  let rec aux (l : (tyvar * mode * tyvar * mode) list) =
+
+
+let rec check_type (defs : def list) (ctx : context) (t : ty) (m : mode) =
+  match t with
+  | Unit | Int | Float | Bool | Char -> true
+  | Arrow (_, _) | Cons (_, _) -> true
+  | Tyvar a -> (get_mode ctx a) = m
+  | Param (par, name) -> if (check_args par defs (get_ty_mode name defs) ctx) = [] then true else false
+  | Exists (ex, bod) -> let def = Def ([], Name "", bod, m) in
+                        if (check_def def defs ctx) = []
+                        then true
+                        else false
+                               
+                               
+and check_args (par : ty list) (defs : def list) (d : (tyvar * mode) list) (ctx : context) =
+  let rec aux (l : (ty * mode * tyvar * mode) list) =
     match l with
     | [] -> []
     | (_, mpar, _, md) :: tl when mpar = md -> aux tl
-    | (a, mpar, _, md) :: tl -> a :: (aux tl)
+    | (Tyvar a, mpar, _, md) :: tl -> a :: (aux tl)
+    | (_, _, _, _) :: tl -> aux tl
   in
-  aux (List.map2 (fun x (y, z) -> (x, (getmode ctx x), y, z)) par d);;
+  aux (List.map2 (fun x (y, z) -> let m = if (check_type defs ctx x Sep) then Sep else Ind in (x, m, y, z)) par d)
 
 
-
-let rec checkdef (tocheck : def) (defs : def list) (ctx : context) =
-  let checkexists (tocheck : def) (defs : def list) (ctx : context) =
-  match (checkdef tocheck defs ctx) with
-  | [] -> []
-  | a -> List.append a (checkdef tocheck defs (List.append (List.map (fun a -> (a, Sep)) a) ctx)) in
+and check_def (tocheck : def) (defs : def list) (ctx : context) =
+  let check_exists (tocheck : def) (defs : def list) (ctx : context) =
+    match (check_def tocheck defs ctx) with
+    | [] -> []
+    | a -> List.append a (check_def tocheck defs (List.append (List.map (fun a -> (a, Sep)) a) ctx)) in
   match tocheck with
     Def (partocheck, nametocheck, tytocheck, mode) ->
      match tytocheck with
      | Unit | Int | Float | Bool | Char -> []
      | Arrow (_, _) | Cons (_, _) -> []
      | Tyvar a -> if List.mem (a, Sep) ctx then [] else a :: []
-     | Param (par, name) -> checkargs par (gettyvarmode name defs) ctx
+     | Param (par, name) -> check_args par defs (get_ty_mode name defs) ctx
      | Exists (ex, bod) -> begin
          let newtocheck = Def ([], nametocheck, bod, mode) in
-         let newdefs = replacedef defs tocheck newtocheck in
-         let out = (checkexists newtocheck newdefs ((ex, Ind) :: ctx)) in
+         let newdefs = replace_def defs tocheck newtocheck in
+         let out = (check_exists newtocheck newdefs ((ex, Ind) :: ctx)) in
          if List.mem ex out then raise (Existential_is_not_sep ex) else out
        end;;
 
@@ -133,9 +147,9 @@ let check (defs : def list) (ctx : context) =
     | [] -> ctx
     | hd :: tl ->
        begin
-         match (checkdef hd defs ctx) with
+         match (check_def hd defs ctx) with
          | [] -> aux tl defs ctx
-         | a -> aux defs (replacedef defs hd (updatedef hd a)) (List.append ctx (List.map (fun x -> (x, Sep)) a))
+         | a -> aux defs (replace_def defs hd (update_def hd a)) (List.append ctx (List.map (fun x -> (x, Sep)) a))
        end
   in aux defs defs ctx;;
 
