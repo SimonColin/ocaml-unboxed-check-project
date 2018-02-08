@@ -8,6 +8,8 @@ type context = (tyvar * mode) list;;
 
 type def = Def of (tyvar * mode) list * tyname * ty * mode;;
 
+type test = string * (def list) * bool * context;;
+
 exception Existential_is_not_sep of tyvar;;
 
 let rec print_ty (u : ty) = 
@@ -180,40 +182,47 @@ let check (defs : def list) (ctx : context) =
                :: ((Def (([(Var "c", Ind); (Var "d", Ind)]), (Name "def3"), (Param (([(Var "c"); (Var "d")]), (Name "def2"))), Sep))
                    :: (Def ([], (Name "def4"), (Exists (Var "e", Tyvar (Var "e"))), Sep)) :: [])) *)
 
-let existential_accept = Def ([], Name "ex_acc", Exists (Var "a", Arrow (Tyvar (Var "a"), Int)), Sep)
+let existential_accept = ("type ex_acc = E : ('a -> int) -> ex_acc", [Def ([], Name "ex_acc", Exists (Var "a", Arrow (Tyvar (Var "a"), Int)), Sep)], true, [])
 
-let existential_reject = Def ([], Name "ex_rej", Exists (Var "a", Tyvar (Var "a")), Sep)
+let existential_reject = ("type ex_rej = E : 'a -> ex_rej", [Def ([], Name "ex_rej", Exists (Var "a", Tyvar (Var "a")), Sep)], false, [])
 
-let existential_absent = Def ([], Name "ex_abs", Exists (Var "a", Unit), Sep)
+let existential_absent = ("type ex_abs = E : unit -> ex_abs", [Def ([], Name "ex_abs", Exists (Var "a", Unit), Sep)], true, [])
 
-let recursive_1 = Def ([(Var "a", Ind); (Var "b", Ind)], Name "t", Tyvar (Var "a"), Sep)
+let recursive_1 = ("type ('a, 'b) t = 'a \nand ('c, 'd) u = ('c, 'd) t", [Def ([(Var "a", Ind); (Var "b", Ind)], Name "t", Tyvar (Var "a"), Sep); Def ([(Var "c", Ind); (Var "d", Ind)], Name "u", Param ([Tyvar (Var "c"); Tyvar (Var "d")], Name "t"), Sep)], true, [(Var "a", Sep); (Var "c", Sep)])
 
-let recursive_2 = Def ([(Var "c", Ind); (Var "d", Ind)], Name "u", Param ([Tyvar (Var "c"); Tyvar (Var "d")], Name "t"), Sep)
+let tree = ("type ('a, 'k) tree = bool -> 'a node \nand 'a node = N : ('a, 'k) tree", [Def ([(Var "a", Ind); (Var "k", Ind)], Name "tree", Arrow (Bool, Param ([Tyvar (Var "a")], Name "node")), Sep); Def ([Var "a", Ind], Name "node", Exists (Var "k", Param ([Tyvar (Var "a"); Tyvar (Var "k")], Name "tree")), Sep)], true, [])
 
-let tree = Def ([(Var "a", Ind); (Var "k", Ind)], Name "tree", Arrow (Bool, Param ([Tyvar (Var "a")], Name "node")), Sep)
-
-let node = Def ([Var "a", Ind], Name "node", Exists (Var "k", Param ([Tyvar (Var "a"); Tyvar (Var "k")], Name "tree")), Sep)
-
-let recursive_self = Def ([(Var "a", Ind)], Name "self", Param ([Tyvar (Var "a")], Name "self"), Sep)
+let recursive_self = ("type 'a self = 'a self", [Def ([(Var "a", Ind)], Name "self", Param ([Tyvar (Var "a")], Name "self"), Sep)], true, [])
                 
 let ctx = [];;
 
-let test (defs : def list) =
-  let print_tyvar (a : tyvar) = match a with
-      Var str -> print_string (str ^ " not Sep") in
-  try print_ctx (check defs ctx)
-  with Existential_is_not_sep e -> print_tyvar e;;
+let test (case : test) =
+  let success str = print_string (str ^ "   -   test passed\n") in
+  let failure str = print_string (str ^ "   -   test failed\n") in
+  let rec contains (a : context) (b : context) =
+    match a with
+    | [] -> true
+    | hd :: tl -> if List.mem hd b then contains tl b else false
+  in
+  let compare (a : context) (b : context) =
+    if (contains a b) && (contains b a) then true else false in
+  match case with
+    (str, defs, pass, ctx) ->
+ (*   let print_tyvar (a : tyvar) = match a with
+        Var str -> print_string (str ^ " not Sep") in *)
+     try let out = (check defs ctx) in if pass && compare out ctx then success str else failure str
+    with Existential_is_not_sep e -> if pass then failure str else success str;;
 
-let _ = test (existential_accept :: [])
+let _ = test existential_accept
 
-let _ = test (existential_reject :: [])
+let _ = test existential_reject
 
-let _ = test [existential_absent]
+let _ = test existential_absent
 
-let _ = test [recursive_1; recursive_2]
+let _ = test recursive_1
 
-let _ = test [tree; node]
+let _ = test tree
 
-let _ = test [recursive_self]
+let _ = test recursive_self
 
           
