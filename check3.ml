@@ -124,8 +124,8 @@ let rec check_type (defs : def list) (ctx : context) (t : ty) (m : mode) =
                           if (List.assoc ex out) = Sep
                           then raise (Existential_is_not_sep ex)
                           else if out = [] then m else Ind
-                            
-                            
+                                                         
+                                                         
 and check_args (par : ty list) (defs : def list) (d : (tyvar * mode) list) (ctx : context) =
   let rec aux (l : (ty  * mode) list) =
     match l with

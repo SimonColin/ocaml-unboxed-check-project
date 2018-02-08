@@ -1,0 +1,125 @@
+\documentclass[a4]{article}
+
+\usepackage[utf8]{inputenc}
+
+\usepackage{mathpartir}
+
+\title{Règles d'inference}
+
+\newcommand{\judg}[3]{#1 \vdash #2 : #3}
+\newcommand{\G}{\Gamma}
+
+\begin{document}
+
+\maketitle
+
+\begin{mathpar}
+	\infer
+	{ }
+	{\judg \G {int} m}
+	
+	\infer
+	{ }
+	{\judg \G {bool} m}
+	
+	\infer
+	{ }
+	{\judg \G {char} m}
+	
+	\infer
+	{ }
+	{\judg \G {float} m}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{Def; \judg \G A m.ind}
+	\\
+	{Def; \judg \G B m.ind}}
+	{\judg \G {A \rightarrow B} m}
+	
+	\infer
+	{{Def; \judg \G A m.ind}
+	\\
+	{Def; \judg \G B m.ind}}
+	{\judg \G {A \times B} m}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : \_) ^ I t) \in Def}
+	\\
+	{\judg \G {T[\alpha _i : A _i] ^ I} m}}
+	{Def;\judg \G {(A _i) ^ I t} m}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : \_) t = (K _j \hspace{0.3em} of \hspace{0.3em} (A _i) ^{I _j}) ^J) \in Def}
+	\\
+	{\forall j \in J, \judg \G {K _j[\alpha _i : A _i] ^{I _j}} m}}
+	{\judg \G {(A _i) ^ I t} m}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{(type(\alpha _i : m _i) ^I t) \in Def}
+	\\
+	{\forall i \in I, \judg \G {A _i} sep.m _i}}
+	{Def;\judg \G {(A _i) ^ I t} m}	
+\end{mathpar}
+
+\iffalse
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : m _i) ^I u= U) \in Def}
+	\\
+	{(type (\beta _j : n _j) ^J t = \_) \in Def}
+	\\
+	{((A _i) ^{I _j} t) \in U}
+	\\
+	{\forall i \in (I _j) \G \vdash m _i = n _{f(i)}}}
+	{Def; \judg \G {(B _j) ^J t} sep \Rightarrow (A _i) ^I u : sep}
+\end{mathpar}
+\fi
+
+%		  (type (αᵢ : mᵢ) tᵢ = _ : m) ∈ Def
+%  ∀i, Def; Γ ⊢ Aᵢ : mᵢ
+%  ————————————————————
+%  Def; Γ ⊢ (Aᵢ) tᵢ : m
+
+\begin{mathpar}
+	\infer
+	{{Def = (type (\alpha _i : m _i) ^I t _j = T _j : m _j) ^J}
+	\\
+	{\forall j, Def; (\alpha _i : m _i) ^I \vdash T _j : m _j}}
+	{\vdash Def}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : m _i) t _i = \_ : m) \in Def}
+	\\
+	{\forall i, Def; \judg \G (A _i) t _i : m _i}}
+	{Def; \G \vdash (A _i) t _i : m}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{Def; \G, \alpha : ind \vdash T:m}
+	{Def; \judg \G {\exists \alpha , T} m}
+\end{mathpar}
+
+\iffalse
+\begin{mathpar}
+	\infer
+	{{U _j = (\beta _i) ^ I t \in u}}
+	{\judg \G {(A _i) ^ I t} sep \Rightarrow A _i : sep \Rightarrow B _i : sep}
+	
+	\infer
+	{{T _j \neq (\beta _i) ^ I u \in t}}
+	{\judg \G {(A _i) ^ I t} sep \Rightarrow (A _i) ^ I t' = T _j : sep}
+\end{mathpar}
+\fi
+
+\end{document}
