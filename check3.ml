@@ -15,12 +15,11 @@ type ty = Unit
         | Tyvar of tyvar
         | Param of (ty list * tyname)
         | Exists of tyvar * ty
-
-type context = (tyvar * mode) list
+        | Abstract of tyname
 
 type def = Def of (tyvar * mode) list * tyname * ty * mode
 
-type test = string * (def list) * bool * context
+type test = string * (def list) * bool
 
 exception Existential_is_not_sep of tyvar
 
@@ -44,18 +43,8 @@ let rec print_ty (u : ty) =
        let _ = print_string "exists"
        in let _ = begin match a with Var c -> print_string c end
           in (print_ty b)
+    | Abstract _ -> ()
   in aux u;;
-
-let rec print_ctx (ctx : context) =
-  let print_mode (m : mode) =
-    match m with
-    | Sep -> print_endline "sep"
-    | Ind -> print_endline "ind"
-    | Deepsep -> print_endline "deepsep"
-  in
-  match ctx with
-  | [] -> ()
-  | (Var name, mode) :: tl -> let _ = print_string name in let _ = print_mode mode in let _ = print_newline in print_ctx tl;;
 
 Random.self_init ();;
 
@@ -85,19 +74,8 @@ let rec rand_defs n = match n with
 let rec rand_tys a = match a with
   | 1 -> (rand_ty ()) :: []
   | b -> (rand_ty ()) :: (rand_tys (b - 1));;
-(*
-let rec tynames n = match n with
-  | [] -> []
-  | Def (tm, tyn, t, _) :: b -> tyn :: tynames b;; *)
 
-let get_mode (c : context) (t : tyvar) = if List.mem (t, Sep) c then Sep else
-                                       Ind;;
-(*
-let getmodefromdef (d : def list) (t : tyvar) (a : ty) =
-  try let definition = (List.find (fun (Def (x, y, z, _)) -> z = a) d)
-      in match definition with Def (tym, tyn, l, _) ->
-                            if List.mem (t, Sep) tym then Sep else Ind
-  with Not_found -> assert false;; *)
+
 
 let get_def (tofind : tyname) (defs : def list) =
   List.find (fun (Def (_, name, _, _)) -> name = tofind);;
@@ -115,126 +93,114 @@ let get_ty_mode (name : tyname) (defs : def list) =
   match (List.find (fun (Def (_, x, _, _)) -> name = x) defs) with Def(tym, _, _, _) -> tym;;
 
 
-let mode_union = function
+let mode_union a b = match a, b with
   | (Ind, Ind) -> Ind
   | (Sep, Sep) -> Sep
   | (Sep, Ind) | (Ind, Sep) -> Sep
   | (Deepsep, _) | (_, Deepsep) -> Deepsep
 
-let mode_inc = function
+let mode_inc a b = match a, b with
   | (Ind, _) | (Sep, Deepsep) | (Deepsep, Deepsep) | (Sep, Sep) -> true
   | _ -> false
 
+let mode_point a b = match a, b with
+  | (Deepsep, _) | (_, Deepsep) -> Deepsep
+  | (Ind, _) | (_, Ind) -> Ind
+  | (a, b) -> a
 
 
 
 
-let rec check_type (defs : def list) (ctx : context) (t : ty) (m : mode) =
-  if m = Ind then Ind else
-    match t with
-    | Unit | Int | Float | Bool | Char -> m
-    | Arrow (_, _) | Cons (_, _) -> m
-    | Or (a, b) -> mode_union ((check_type defs ctx a m), (check_type defs ctx b m))
-    | Tyvar a -> (get_mode ctx a)
-    | Param (par, name) -> if check_args par defs (get_ty_mode name defs) ctx = [] then m else Ind
-    | Exists (ex, bod) -> let def = Def ([], Name "", bod, m) in
-                          let out = (check_def def defs ctx m) in
-                          let a = (List.assoc ex out) in
-                          if mode_inc (Sep, a)
-                          then raise (Existential_is_not_sep ex)
-                          else if out = [] then m else Ind
-                                                         
-                                                         
-and check_args (par : ty list) (defs : def list) (d : (tyvar * mode) list) (ctx : context) =
-  let rec aux (l : (ty  * mode) list) =
+let rec check_type (tocheck : ty) (defs : def list) (m : mode) =
+  if m = Ind then [] else
+    match tocheck with
+    | Unit | Int | Float | Bool | Char -> []
+    | Arrow (a, b) | Cons (a, b) | Or (a, b) ->
+       let outa = (check_type a defs m) in
+       let outb = (check_type b defs m) in
+       List.append outa outb
+    | Tyvar a -> [(a, m)]
+    | Param (par, name) -> check_args par defs (get_ty_mode name defs)
+    | Exists (ex, bod) -> begin
+        let out = check_type bod defs m in
+        try if List.assoc ex out = Ind then raise (Existential_is_not_sep ex)
+            else out
+        with Not_found -> out
+      end
+    | Abstract par -> []
+                            
+                            
+                            
+and check_args (par : ty list) (defs : def list) (d : (tyvar * mode) list) =
+  let rec aux (l : (ty * mode) list) =
     match l with
     | [] -> []
-    | (p, md) :: tl when let a = (check_type defs ctx p md) in mode_inc (a, md) -> aux tl
-    | (Tyvar a, md) :: tl -> (a, md) :: (aux tl)
-    | (_, _) :: tl -> assert false (* aux tl *)
-  in
-  aux (List.map2 (fun x (y, z) -> (x, z)) par d) (*let m = if  then Sep else Ind in (x, (check_type defs ctx x Sep), y, z)) par d) *)
+    | (hdty, hdm) :: tl -> List.append (check_type hdty defs hdm) (aux tl) in
+  let l = (List.map2 (fun x (y,z) -> (x, z)) par d) in
+  aux l
 
 
-and check_def (tocheck : def) (defs : def list) (ctx : context) (m : mode) =
-  let check_exists (tocheck : def) (defs : def list) (ctx : context) (m : mode) =
-    match (check_def tocheck defs ctx m) with
-    | [] -> []
-    | a -> List.append a (check_def tocheck defs (List.append a ctx) m) in
+and check_def (tocheck : def) (defs : def list) (m : mode) =
   match tocheck with
-    Def (partocheck, nametocheck, tytocheck, mode) ->
-     match tytocheck with
-     | Unit | Int | Float | Bool | Char -> []
-     | Arrow (_, _) | Cons (_, _) when m != Deepsep -> []
-     | Arrow (a, b) | Cons (a, b) | Or (a, b) -> let defa = (Def (partocheck, nametocheck, a, mode)) in
-                                                let defb = (Def (partocheck, nametocheck, a, mode)) in
-                                                let outa = (check_def defa (replace_def defs tocheck defa) ctx m) in
-                                                let outb = (check_def defb (replace_def defs tocheck defb) (List.append outa ctx) m) in
-                                                List.append  outa outb
-     | Tyvar a -> if List.mem (a, Sep) ctx then [] else (a, Sep) :: []
-     | Param (par, name) -> check_args par defs (get_ty_mode name defs) ctx
-     | Exists (ex, bod) -> begin
-         let newtocheck = Def ([], nametocheck, bod, mode) in
-         let newdefs = replace_def defs tocheck newtocheck in
-         let out = (check_exists newtocheck newdefs ((ex, Ind) :: ctx) m) in
-         if List.mem (ex, Sep) out then raise (Existential_is_not_sep ex) else out
-       end
+    Def (partc, nametc, tytc, modetc) ->
+     match tytc with
+     | Unit | Int | Float | Char |Bool -> []
+     | Arrow (_, _) | Cons (_, _) | Or (_, _) | Param (_, _) | Exists (_, _) | Tyvar _ | Abstract _ -> (check_type tytc defs (mode_point m Ind))
+                                                                                                                      
 
 
-
-let check (defs : def list) (ctx : context) =
-  let rec aux (todo : def list) (defs : def list) (ctx : context) =
+let check (defs : def list) =
+  let rec aux (todo : def list) (defs : def list) =
     match todo with
-    | [] -> ctx
+    | [] -> defs
     | hd :: tl ->
        begin
-         match (check_def hd defs ctx Sep) with
-         | [] -> aux tl defs ctx
-         | a -> aux defs (replace_def defs hd (update_def hd a)) (List.append ctx a)
+         match (check_def hd defs Sep) with
+         | [] -> aux tl defs
+         | a -> aux defs (replace_def defs hd (update_def hd a))
        end
-  in aux defs defs ctx;;
+  in aux defs defs;;
 
-(* let defs = (Def ([], Name "def1", Int, Sep))
-           :: ((Def (([(Var "a", Ind); (Var "b", Ind)]), (Name "def2"), (Tyvar (Var "b")), Sep))
-               :: ((Def (([(Var "c", Ind); (Var "d", Ind)]), (Name "def3"), (Param (([(Var "c"); (Var "d")]), (Name "def2"))), Sep))
-                   :: (Def ([], (Name "def4"), (Exists (Var "e", Tyvar (Var "e"))), Sep)) :: [])) *)
+let existential_pass = ("type ex_acc = E : ('a -> int) -> ex_acc", [Def ([], Name "ex_acc", Exists (Var "a", Arrow (Tyvar (Var "a"), Int)), Sep)], true)
 
-let existential_accept = ("type ex_acc = E : ('a -> int) -> ex_acc", [Def ([], Name "ex_acc", Exists (Var "a", Arrow (Tyvar (Var "a"), Int)), Sep)], true, [])
+let existential_fail = ("type ex_rej = E : 'a -> ex_rej", [Def ([], Name "ex_rej", Exists (Var "a", Tyvar (Var "a")), Sep)], false)
 
-let existential_reject = ("type ex_rej = E : 'a -> ex_rej", [Def ([], Name "ex_rej", Exists (Var "a", Tyvar (Var "a")), Sep)], false, [])
+let existential_absent = ("type ex_abs = E : unit -> ex_abs", [Def ([], Name "ex_abs", Exists (Var "a", Unit), Sep)], true)
 
-let existential_absent = ("type ex_abs = E : unit -> ex_abs", [Def ([], Name "ex_abs", Exists (Var "a", Unit), Sep)], true, [])
+let recursive_1 = ("type ('a, 'b) t = 'a \nand ('c, 'd) u = ('c, 'd) t", [Def ([(Var "a", Ind); (Var "b", Ind)], Name "t", Tyvar (Var "a"), Sep); Def ([(Var "c", Ind); (Var "d", Ind)], Name "u", Param ([Tyvar (Var "c"); Tyvar (Var "d")], Name "t"), Sep)], true)
 
-let recursive_1 = ("type ('a, 'b) t = 'a \nand ('c, 'd) u = ('c, 'd) t", [Def ([(Var "a", Ind); (Var "b", Ind)], Name "t", Tyvar (Var "a"), Sep); Def ([(Var "c", Ind); (Var "d", Ind)], Name "u", Param ([Tyvar (Var "c"); Tyvar (Var "d")], Name "t"), Sep)], true, [(Var "a", Sep); (Var "c", Sep)])
+let tree = ("type ('a, 'k) tree = bool -> 'a node \nand 'a node = N : ('a, 'k) tree", [Def ([(Var "a", Ind); (Var "k", Ind)], Name "tree", Arrow (Bool, Param ([Tyvar (Var "a")], Name "node")), Sep); Def ([Var "a", Ind], Name "node", Exists (Var "k", Param ([Tyvar (Var "a"); Tyvar (Var "k")], Name "tree")), Sep)], true)
 
-let tree = ("type ('a, 'k) tree = bool -> 'a node \nand 'a node = N : ('a, 'k) tree", [Def ([(Var "a", Ind); (Var "k", Ind)], Name "tree", Arrow (Bool, Param ([Tyvar (Var "a")], Name "node")), Sep); Def ([Var "a", Ind], Name "node", Exists (Var "k", Param ([Tyvar (Var "a"); Tyvar (Var "k")], Name "tree")), Sep)], true, [])
+let recursive_self = ("type 'a self = 'a self", [Def ([(Var "a", Ind)], Name "self", Param ([Tyvar (Var "a")], Name "self"), Sep)], true)
 
-let recursive_self = ("type 'a self = 'a self", [Def ([(Var "a", Ind)], Name "self", Param ([Tyvar (Var "a")], Name "self"), Sep)], true, [])
+let inclus = ("type 'a t : ind and u = bool t", [Def ([(Var "a", Ind)], Name "t", Unit, Ind); Def ([], Name "u", Param ([Bool], Name "t"), Ind)], true)
 
-let inclus = ("type 'a t : ind and u = bool t", [Def ([(Var "a", Ind)], Name "t", Unit, Ind); Def ([], Name "u", Param ([Bool], Name "t"), Ind)], true, [])
-                
-let ctx = [];;
+let deepsep_fail = ("type 'a t and u = U : (b -> int) t -> e", [
+                      Def ([(Var "a", Ind)], Name "t", Abstract (Name "t"), Deepsep);
+                      Def ([], Name "u", Exists (Var "b", Param ([Arrow (Tyvar (Var "b"), Int)], Name "t")), Ind)], false)
+
+let deepsep_fail_big = ("type 'a t : Deepsep and u = U : (b -> int) w -> u and 'c w = ('c -> bool) * int", [
+                      Def ([(Var "a", Deepsep)], Name "t", Abstract (Name "t"), Deepsep);
+                      Def ([], Name "u", Exists (Var "b", Param ([Arrow ((Tyvar (Var "b")), Int)], Name "w")), Ind);
+                      Def ([(Var "c", Ind)], Name "w", Cons (Param ([Arrow ((Tyvar (Var "c")), Bool)], Name "t"), Int), Ind)], false)
+
+let deepsep_pass = ("type 'a t : Deepsep and 'b u = (b -> int) w and 'c w = ('c -> bool) * int", [
+                      Def ([(Var "a", Deepsep)], Name "t", Abstract (Name "t"), Deepsep);
+                      Def ([(Var "b", Ind)], Name "u", Param ([Arrow ((Tyvar (Var "b")), Int)], Name "w"), Ind);
+                      Def ([(Var "c", Ind)], Name "w", Cons (Param ([Arrow ((Tyvar (Var "c")), Bool)], Name "t"), Int), Ind)], true)
+                  
 
 let test (case : test) =
   let success str = print_string (str ^ "   -   test passed\n") in
   let failure str = print_string (str ^ "   -   test failed\n") in
-  let rec contains (a : context) (b : context) =
-    match a with
-    | [] -> true
-    | hd :: tl -> if List.mem hd b then contains tl b else false
-  in
-  let compare (a : context) (b : context) =
-    if (contains a b) && (contains b a) then true else false in
   match case with
-    (str, defs, pass, ctx) ->
- (*   let print_tyvar (a : tyvar) = match a with
-        Var str -> print_string (str ^ " not Sep") in *)
-     try let out = (check defs ctx) in if pass && compare out ctx then success str else failure str
+    (str, defs, pass) ->
+    try let _ = (check defs) in if pass then success str else failure str
     with Existential_is_not_sep e -> if pass then failure str else success str;;
 
-let _ = test existential_accept
+let _ = test existential_pass
 
-let _ = test existential_reject
+let _ = test existential_fail
 
 let _ = test existential_absent
 
@@ -246,4 +212,8 @@ let _ = test recursive_self
 
 let _ = test inclus
 
-          
+let _ = deepsep_fail
+
+let _ = deepsep_fail_big          
+
+let _ = deepsep_pass
