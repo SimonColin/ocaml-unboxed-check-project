@@ -216,8 +216,8 @@ let inclus = ("type 'a t : ind and u = bool t", [Def ([(Var "a", Ind)], Name "t"
 let ctx = [];;
 
 let test (case : test) =
-  let success str = print_string (str ^ "   -   test passed\n") in
-  let failure str = print_string (str ^ "   -   test failed\n") in
+  let success str = Printf.printf "%s\n\ttest passed\n\n" str in
+  let failure str = Printf.printf "%s\n\ttest failed\n\n" str in
   let rec contains (a : context) (b : context) =
     match a with
     | [] -> true
