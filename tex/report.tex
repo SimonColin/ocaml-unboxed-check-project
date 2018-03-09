@@ -1,0 +1,73 @@
+\documentclass[a4]{article}
+
+\usepackage[utf8]{inputenc}
+
+\usepackage{lib}
+
+\title{Titre}
+\author{Simon Colin}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Intro}
+
+The OCaml programming language recently started allowing user to unbox single constructor single field types which allows the values to be represented only as the value of their field rather than a tag and the value which allows a slight improvement in speed and memory usage. Unfortunately a quirk of the language is that all base values (int, char, bool, ...) are stored on a single memory word, except for float which is stored on two, this along with the fact that the size of the fields of an array is determined by its first value means that if we were to have a type that can contain both float and non float values, which is possible in OCaml through the use of existentials in GADTs, and this type was unboxed, we would be able to achieve segmentation faults by putting both floats and non floats in the same array. Determining whether a type can contain both float values and non float values becomes non trivial when we have different types that reference each other recursively.
+
+To decide this, we decided to classify types as separable (Sep) or independant (Ind). Separable types cannot contain both float and non float values, and thus can be safely unboxed, whereas we don't know whether independant types could. We then defined a set of inference rules that hold if all the types and their parameters are as they should be, these rules are then applied on the set of type declarations to check where they will either find a type or type parameter that isn't in the right mode, in which case it will be changed in the definition, reach a fix point where all the types are consistent or find a type that should be sep but can contain both float and non float values. This set of inference rules was then implemented on a simplified model of the language where it performed as expected.
+
+The inference rules were worked out during regular meetings with Gabriel Scherer and I wrote the implementation while receiving feedback and advice from Gabriel Scherer.
+
+\section{Rules}
+
+One aspect that was omitted in the introduction for the sake of brevity is that through the use of constraints, it is possible to extract single values from a given type, which led to the creation of a third mode Deepsep which defines a type that is made of only Deepsep types, the base types as well as any type that is Sep being deepsep.
+
+We have also defined a "product" of modes such that Deepsep * anything is Deepsep, Ind * Sep is Ind and a type * itself is that same type.
+
+The set of type declarations is noted as Def, a type definition is made of a list of pairs of type variables and modes that are the parameters as well as the mode that the parameter needs to have, the name, definition and the mode that this type needs to have.
+
+List the inference rules
+
+These inference rules should all hold on a set of type declarations that is correct.
+
+First, the rules state that the base types are of all the modes.
+the next rules state that for types that are not single values such as products or arrows we need both values to be of Ind * the type that the superior type needs to be, in practice this means that for Sep they need to be Ind and for Deepsep they need to be Deepsep.
+Next the rules ensure that a parameter type is of the mode it needs to be by replacing the type variables by the types that are given as parameters to it in its definition.
+In the case of types defined according to other types whether abstract or not, we need the parameters passed to agree with the modes of the definition of the type in question. This means that for abstract types the user needs to specify this.
+As far as types with an existential variable are concerned, this existential variable cannot be Ind if the type is supposed to be Sep or Deepsep, this means that the type with the same definition but the existential variable as an Ind parameter needs to be Sep or Deepsep.
+The set of definitions is well formed if every type evaluates to the mode it's supposed to be.
+
+
+\section{Implementation}
+
+In the implementation, after defining the types to represent modes, type variables, type names, type definition bodies and type definitions, we defined base operations needed for dealing with them such as mode inclusion or mode product. Once these were defined it was possible to start dealing with the definitions, this was done at three levels:
+- \code{check_type} which checks whether a definition body has a given type, if this is the case, it returns the empty set, otherwise it returns the set of offending type variables, in the event of a type that is not unboxable this function raises an error.
+- \code{check_def} which calls this function on the non trivial (single base type) definitions it is asked to check
+- \code{check} which calls \code{check_def} on every definition from the set of definitions to check, in the event of \code{check_def} not returning an empty list, check updates the definition in question and then starts again from the first definition.
+
+\Xgabriel{you should show the concrete signatures with types:}
+\begin{lstlisting}
+val check_type : ... -> ...
+val check_def : ...
+val check : ...  
+\end{lstlisting}
+
+To check whether the functions were performing as expected, an example type as well as examples that are instances of the typical scenarios that we can expect were defined and checked.
+
+The choice to require a type featuring a constraint be deepsep is overly conservative, one could image a system that propagates constraints on the type in question and thus ensures that only the minimal set is required to be sep, however times constraints did not allow for this.
+
+\Xgabriel{It's more/better than time constraints: we were not convinced
+(and nor was Damien Doligez) that fine-grained constraint was a good deal,
+because they would make the system more complex while they are rarely used
+in practice. (It is common to make compromises to make a system simpler at
+the cost of completeness, and it is not only to save time: it also
+reduces bugs, makes it easier to explain, etc.)
+}
+
+Another area for improvement that could not be dealt with because it was noticed too late is that equations can be put on existential type variables. A quick fix for this would be to apply the current implementation if the existential variable doesn't appear in the equations, if it appears in a type that is deepsep, assuming the existential variable to be deepsep and if the type is sep, assuming the existential variable to be sep if the type is equal to the existential variable only. The implementation in its current state is thus not quite in agreement with the actual OCaml language and slightly too demanding, however it still represents an improvement over the current system.
+
+The idea of using inference rules to compute a fixpoint was inspired by the way variance is computed. 
+
+\end{document}
