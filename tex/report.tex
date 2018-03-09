@@ -4,6 +4,8 @@
 
 \usepackage{lib}
 
+\usepackage{caption}
+
 \title{Titre}
 \author{Simon Colin}
 \date{\today}
@@ -14,31 +16,119 @@
 
 \section{Intro}
 
-The OCaml programming language recently started allowing user to unbox single constructor single field types which allows the values to be represented only as the value of their field rather than a tag and the value which allows a slight improvement in speed and memory usage. Unfortunately a quirk of the language is that all base values (int, char, bool, ...) are stored on a single memory word, except for float which is stored on two, this along with the fact that the size of the fields of an array is determined by its first value means that if we were to have a type that can contain both float and non float values, which is possible in OCaml through the use of existentials in GADTs, and this type was unboxed, we would be able to achieve segmentation faults by putting both floats and non floats in the same array. Determining whether a type can contain both float values and non float values becomes non trivial when we have different types that reference each other recursively.
+The OCaml programming language recently started allowing user to unbox single constructor single field types which allows the values to be represented only as the value of their field rather than a tag and the value, this allows a slight improvement in speed and memory usage. Unfortunately a quirk of the language is that all base values (int, char, bool, ...) are stored on a single memory word except for float which is stored on two, this would be fine were it not for the fact that that the size of the fields of an array is determined by its first value. Indeed, this means that if we were to have a type that can contain both float and non float values and this type was unboxed, we would be able to achieve segmentation faults by putting both floats and non floats in the same array. OCaml features generalized algebraic datatypes which among other things allow the definition of existentially quantified type variables, such type variables can be used to define a type able to contain both float values and non float values. Determining whether a single type can contain both float values and non float is quite straightforward, however the matter becomes more complicated when dealing with several mutually recursive types.
 
-To decide this, we decided to classify types as separable (Sep) or independant (Ind). Separable types cannot contain both float and non float values, and thus can be safely unboxed, whereas we don't know whether independant types could. We then defined a set of inference rules that hold if all the types and their parameters are as they should be, these rules are then applied on the set of type declarations to check where they will either find a type or type parameter that isn't in the right mode, in which case it will be changed in the definition, reach a fix point where all the types are consistent or find a type that should be sep but can contain both float and non float values. This set of inference rules was then implemented on a simplified model of the language where it performed as expected.
+\bigskip
 
-The inference rules were worked out during regular meetings with Gabriel Scherer and I wrote the implementation while receiving feedback and advice from Gabriel Scherer.
+\begin{lstlisting}
+  type any\_t = Any 'a -> any\_t 
+\end{lstlisting}
+{\footnotesize This type can contain float and non float values which could mean segmentation faults if unboxed.}
+\bigskip
+
+To determine which types can be unboxed, we decided to use a mode which is either Separable (Sep), that is to say the type contains either only float values or only non float values, or Independant (Ind), in which case nothing is said about the values contained within the type. We then worked out what it meant for a type to be separable and then phrased the results of this reflection as a set of inference rules that should hold if all the types and their parameters are as they should be, should this not be the case we can identify an offending parameter or type and correct it or we are trying to unbox a type that cannot be unboxed and we return an error. Doing this until a fixpoint is reached or we fail allows us to check the set of type declarations and establish constraints on the type parameters. This set of inference rules was then implemented on a simplified model of the language where it correctly identified non unboxable types and returned correct constraints on unboxable ones.
+
+The inference rules were worked out during regular meetings with Gabriel Scherer and I wrote the implementation while receiving regular feedback and advice from Gabriel Scherer.
 
 \section{Rules}
 
-One aspect that was omitted in the introduction for the sake of brevity is that through the use of constraints, it is possible to extract single values from a given type, which led to the creation of a third mode Deepsep which defines a type that is made of only Deepsep types, the base types as well as any type that is Sep being deepsep.
+\subsection{Refining the model}
+One relevant feature of OCaml that was omitted in the introduction for the sake of brevity is that through the use of constraints, it is possible to extract single values from a given type, which led to the creation of a third mode Deepsep which defines a type that is made of only Deepsep types, the base types being deepsep.
 
+\subsection{Notations}
 We have also defined a "product" of modes such that Deepsep * anything is Deepsep, Ind * Sep is Ind and a type * itself is that same type.
 
 The set of type declarations is noted as Def, a type definition is made of a list of pairs of type variables and modes that are the parameters as well as the mode that the parameter needs to have, the name, definition and the mode that this type needs to have.
 
-List the inference rules
+\begin{mathpar}
+	\infer
+	{ }
+	{\judg \G {int} m}
+	
+	\infer
+	{ }
+	{\judg \G {bool} m}
+	
+	\infer
+	{ }
+	{\judg \G {char} m}
+	
+	\infer
+	{ }
+	{\judg \G {float} m}
+\end{mathpar}
 
-These inference rules should all hold on a set of type declarations that is correct.
+The base types of all the modes.
 
-First, the rules state that the base types are of all the modes.
-the next rules state that for types that are not single values such as products or arrows we need both values to be of Ind * the type that the superior type needs to be, in practice this means that for Sep they need to be Ind and for Deepsep they need to be Deepsep.
-Next the rules ensure that a parameter type is of the mode it needs to be by replacing the type variables by the types that are given as parameters to it in its definition.
-In the case of types defined according to other types whether abstract or not, we need the parameters passed to agree with the modes of the definition of the type in question. This means that for abstract types the user needs to specify this.
-As far as types with an existential variable are concerned, this existential variable cannot be Ind if the type is supposed to be Sep or Deepsep, this means that the type with the same definition but the existential variable as an Ind parameter needs to be Sep or Deepsep.
+\begin{mathpar}
+	\infer
+	{{Def; \judg \G A m.Ind}
+	\\
+	{Def; \judg \G B m.Ind}}
+	{\judg \G {A \rightarrow B} m}
+	
+	\infer
+	{{Def; \judg \G A m.Ind}
+	\\
+	{Def; \judg \G B m.Ind}}
+	{\judg \G {A \times B} m}
+\end{mathpar}
+
+Types whose definition is not a single value are separable if the values are independant and deepsep if the values are deepsep, this can be written as that they are of mode m if their internal values are of mode m.Ind.
+
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : \_) ^ I t) \in Def}
+	\\
+	{\judg \G {T[\alpha _i : A _i] ^ I} m}}
+	{Def;\judg \G {(A _i) ^ I t} m}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : \_) t = (K _j \hspace{0.3em} of \hspace{0.3em} (A _i) ^{I _j}) ^J) \in Def}
+	\\
+	{\forall j \in J, \judg \G {K _j[\alpha _i : A _i] ^{I _j}} m}}
+	{\judg \G {(A _i) ^ I t} m}
+\end{mathpar}
+%Isn't this rule included in the one just before?
+For an instance of a parameterized type to be of a given mode m, its body needs to be of that mode after you replace the type variables with the parameters given.
+
+\begin{mathpar}
+	\infer
+	{{(type(\alpha _i : m _i) ^I t) \in Def}
+	\\
+	{\forall i \in I, \judg \G {A _i} sep.m _i}}
+	{Def;\judg \G {(A _i) ^ I t} m}	
+\end{mathpar}
+
+If all the parameters of an abstract or not parameterized type are of the mode that they are supposed to be then this type is of the mode it's supposed to be.
+
+\begin{mathpar}
+	\infer
+	{{Def = (type (\alpha _i : m _i) ^I t _j = T _j : m _j) ^J}
+	\\
+	{\forall j, Def; (\alpha _i : m _i) ^I \vdash T _j : m _j}}
+	{\vdash Def}
+\end{mathpar}
+
+\begin{mathpar}
+	\infer
+	{{(type (\alpha _i : m _i) t _i = \_ : m) \in Def}
+	\\
+	{\forall i, Def; \judg \G (A _i) t _i : m _i}}
+	{Def; \G \vdash (A _i) t _i : m}
+\end{mathpar}
+
 The set of definitions is well formed if every type evaluates to the mode it's supposed to be.
 
+\begin{mathpar}
+	\infer
+	{Def; \G, \alpha : ind \vdash T:m}
+	{Def; \judg \G {\exists \alpha , T} m}
+\end{mathpar}
+
+For types with an existential variable, they are of a given mode if the parameterized type with the same body and the existential type variable as single parameter being of this type without requiring the existential type variable to be separable or deepsep since this existential variable can contain both float values and non float values.
 
 \section{Implementation}
 
@@ -49,22 +139,37 @@ In the implementation, after defining the types to represent modes, type variabl
 
 \Xgabriel{you should show the concrete signatures with types:}
 \begin{lstlisting}
-val check_type : ... -> ...
-val check_def : ...
-val check : ...  
+  type tyvar = Var of string
+type tyname = Name of string
+type mode = Sep
+          | Ind
+          | Deepsep
+
+type ty = Unit
+        | Int
+        | Float
+        | Bool
+        | Char
+        | Arrow of (ty * ty)
+        | Cons of (ty * ty)
+        | Or of (ty * ty)
+        | Tyvar of tyvar
+        | Param of (ty list * tyname)
+        | Exists of tyvar * ty
+        | Abstract of tyname
+
+type def = Def of (tyvar * mode) list * tyname * ty * mode
+
+val check\_type : ty -> def list -> mode -> (tyvar * mode) list
+val check\_def : def -> def list -> mode -> (tyvar * mode) list
+val check : def list -> def list
 \end{lstlisting}
 
 To check whether the functions were performing as expected, an example type as well as examples that are instances of the typical scenarios that we can expect were defined and checked.
 
-The choice to require a type featuring a constraint be deepsep is overly conservative, one could image a system that propagates constraints on the type in question and thus ensures that only the minimal set is required to be sep, however times constraints did not allow for this.
+\section{Discussion}
 
-\Xgabriel{It's more/better than time constraints: we were not convinced
-(and nor was Damien Doligez) that fine-grained constraint was a good deal,
-because they would make the system more complex while they are rarely used
-in practice. (It is common to make compromises to make a system simpler at
-the cost of completeness, and it is not only to save time: it also
-reduces bugs, makes it easier to explain, etc.)
-}
+The choice to require a type featuring a constraint be deepsep is overly conservative, one could image a system that propagates constraints on the type in question and thus ensures that only the minimal set is required to be sep, however constraints are a quite advanced feature, as is unboxing types so it's worth considering whether having the most accurate set of requirements is a worthwhile investment of time, this is why the compromise was made to settle for this imperfect solution.
 
 Another area for improvement that could not be dealt with because it was noticed too late is that equations can be put on existential type variables. A quick fix for this would be to apply the current implementation if the existential variable doesn't appear in the equations, if it appears in a type that is deepsep, assuming the existential variable to be deepsep and if the type is sep, assuming the existential variable to be sep if the type is equal to the existential variable only. The implementation in its current state is thus not quite in agreement with the actual OCaml language and slightly too demanding, however it still represents an improvement over the current system.
 
