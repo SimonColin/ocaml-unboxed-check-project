@@ -126,7 +126,8 @@ Types whose definition is not a single value are separable if the values are ind
 	{\forall j \in J, \judg \G {K _j[\alpha _i : A _i] ^{I _j}} m}}
 	{\judg \G {(A _i) ^ I t} m}
 \end{mathpar}
-%Isn't this rule included in the one just before?
+\Xsimon{Isn't this last rule included in the one just before?}\Xgabriel{The second rule indeed is strange (I think the second premise on the top-right is wrong} and subsumed by the one above. In the judgment for types, when we encounter a parametrized type $(A_i)^i t$, we don't need to depend on how $t$ was declared, only on its mode in the $Def$ part. It is in the judgment for definitions or type declarations that we should distinguish the various ways to declare a type.}
+
 For an instance of a parameterized type to be of a given mode \Xgabriel[m]{TODO: when you refer to mathematics inside text, use the math mode with dollars. For example, ``m'' here should be ``$m$'' instead.}, its body needs to be of that mode after you replace the type variables with the parameters given.
 
 \begin{mathpar}
