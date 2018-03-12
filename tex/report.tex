@@ -163,14 +163,6 @@ For an instance of a parameterized type to be of a given mode, each parameter ne
 	{\vdash Def}
 \end{mathpar}
 
-\begin{mathpar}
-	\infer
-	{{(\type (\alpha _i : m _i) t _i = \_ : m) \in Def}
-	\\
-	{\forall i, Def; \judg \G (A _i) t _i : m _i}}
-	{Def; \G \vdash (A _i) t _i : m}
-\end{mathpar}
-
 The set of definitions is well formed if every type evaluates to the mode it's supposed to be.
 
 \begin{mathpar}
