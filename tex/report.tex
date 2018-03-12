@@ -17,7 +17,7 @@
 
 \maketitle
 
-\section{Introdction}
+\section{Introduction}
 
 The OCaml programming language recently started allowing user to unbox single constructor single field types which allows the values to be represented only as the value of their field rather than a tag and the value, this allows a slight improvement in speed and memory usage. Such types are defined by using the \code{[@@unboxed]} annotation.
 
@@ -54,7 +54,7 @@ Error: This type cannot be unboxed because
        You should annotate it with [@@ocaml.boxed].
 \end{lstlisting}
 
-To determine which types can be unboxed, we took inspiration from the way the variance(covariance, contravariance, ...) of type definitions is computed in OCaml and decided to use a mode which is either Separable ($\Sep$), that is to say the type contains either only float values or only non float values, or {Independent} ($\Ind$), in which case nothing is said about the values contained within the type. We then worked out what it meant for a type to be separable and then phrased the results of this reflection as a set of inference rules that should hold if all the types and their parameters are as they should be, should this not be the case we can identify an offending parameter or type and correct it or we are trying to unbox a type that cannot be unboxed and we return an error. Doing this until a fixpoint is reached or we fail allows us to check the set of type declarations and establish constraints on the type parameters. This set of inference rules was then implemented on a simplified model of the language where it correctly identified non unboxable types and returned correct constraints on unboxable ones.
+To determine which types can be unboxed, we took inspiration from the way the variance (covariance, contravariance, ...) of type definitions is computed in OCaml and decided to use a mode which is either Separable ($\Sep$), that is to say the type contains either only float values or only non float values, or {Independent} ($\Ind$), in which case nothing is said about the values contained within the type. We then worked out what it meant for a type to be separable and then phrased the results of this reflection as a set of inference rules that should hold if all the types and their parameters are as they should be, should this not be the case we can identify an offending parameter or type and correct it or we are trying to unbox a type that cannot be unboxed and we return an error. Doing this until a fixpoint is reached or we fail allows us to check the set of type declarations and establish constraints on the type parameters. This set of inference rules was then implemented on a simplified model of the language where it correctly identified non unboxable types and returned correct constraints on unboxable ones.
 
 The inference rules were worked out during regular meetings with Gabriel Scherer and I wrote the implementation while receiving regular feedback and advice from Gabriel Scherer.
 
@@ -141,7 +141,7 @@ Whereas if $m = \Deepsep$ it becomes
 
 \begin{mathpar}
 	\infer
-	{{(\type (\alpha _i : \_) ^ I t) \in Def}
+	{{(\type (\alpha _i : \_) ^ I t = T) \in Def}
 	\\
 	{\judg \G {T[\alpha _i : A _i] ^ I} m}}
 	{Def;\judg \G {(A _i) ^ I t} m}
@@ -157,7 +157,7 @@ For an instance of a parameterized type to be of a given mode, its body needs to
 	{Def;\judg \G {(A _i) ^ I t} m}	
 \end{mathpar}
 
-If all the parameters of an abstract or not parameterized type are of the mode that they are supposed to be then this type is of the mode it's supposed to be.
+If all the parameters of an parameterized type are of the mode that they are supposed to be then this type is of the mode it's supposed to be, this holds whether the type is abstract or not.
 
 \begin{mathpar}
 	\infer
@@ -183,23 +183,25 @@ The set of definitions is well formed if every type evaluates to the mode it's s
 	{Def; \judg \G {\exists \alpha , T} m}
 \end{mathpar}
 
-For types that feature an existential variable, this variable is capable of containing both float and non float values, this means that it will never be able to be of any mode other than $\Sep$. For our purposes, we can choose to view a type $ext$ featuring an existential variable $a$ that is supposed to be of mode $m$ as a type $T$ parameterized by this variable and then check if $T$ is of mode $m$, while keeping in mind that if $T$ being of mode $m$ requires $a$ to be aything other than $\Sep$ the type cannot be safely unboxed.
+For types that feature an existential variable, this variable is capable of containing both float and non float values, this means that it will never be able to be of any mode other than $\Sep$. For our purposes, we can choose to view a type $ext$ featuring an existential variable $a$ that is supposed to be of mode $m$ as a type $T$ parameterized by this variable and then check if $T$ is of mode $m$, while keeping in mind that if $T$ being of mode $m$ requires $a$ to be aything other than $\Ind$ the type cannot be safely unboxed.
 
 \section{Implementation}
 
 In the implementation, after defining the types to represent modes, type variables, type names, type definition bodies and type definitions, we defined base operations needed for dealing with them such as mode inclusion or mode product. Once these were defined it was possible to start dealing with the definitions, this was done at three levels :
 \begin{itemize}
-\item \code{check_type} which checks whether a definition body has a given type, if this is the case, it returns the empty set, otherwise it returns the set of offending type variables, in the event of a type that is not unboxable this function raises an error.
-\item \code{check_def} which calls this function on the non trivial (single base type) definitions it is asked to check
-\item \code{check} which calls \code{check_def} on every definition from the set of definitions to check, in the event of \code{check_def} not returning an empty list, check updates the definition in question and then starts again from the first definition.
+\item \code{check_type} which checks whether a definition body has a given type, if this is the case, it returns an empty list, otherwise it returns a list of offending type variables and the modes that they need to be, in the event of a type that is not unboxable this function raises an error.
+\item \code{check_def} which calls this function on the non trivial (single base type) definitions it is asked to check and returns the list of type variables and modes that \code{check_type} returns.
+\item \code{check} which calls \code{check_def} on every definition from the set of definitions to check, in the event of \code{check_def} not returning an empty list, \code{check} updates the definition in question and then starts again from the first definition. This means that we are guaranteed to reach a fixpoint eventually since the set of type variables is finite and whenever we restart from the first definition, we narrow down the mode of at least one type variable.
 \end{itemize}
 
+The source code of this implementation can be found at :
 \begin{lstlisting}
-type tyvar = Var of string
-type tyname = Name of string
-type mode = Sep
-          | Ind
-          | Deepsep
+  https://github.com/SimonColin/ocaml-unboxed-check-project
+\end{lstlisting}
+
+\begin{lstlisting}
+type tyvar = Var of string type tyname = Name of string type mode =
+Sep | Ind | Deepsep
 
 type ty = Unit
         | Int
@@ -225,7 +227,7 @@ To check whether the functions were performing as expected, an example type as w
 
 \section{Discussion}
 
-The choice to require a type featuring a constraint be deepsep is overly conservative, one could image a system that propagates constraints on the type in question and thus ensures that only the minimal set is required to be sep, however constraints are a quite advanced feature, as is unboxing types so it's worth considering whether having the most accurate set of requirements is a worthwhile investment of time, this is why the compromise was made to settle for this imperfect solution.
+The choice to require a type featuring a constraint be deepsep is overly conservative, one could image a system that propagates constraints on the type in question and thus ensures that only the minimal set is required to be sep, however constraints are quite an advanced feature, as is unboxing types so it's worth considering whether having the most accurate set of requirements is a worthwhile investment of time, this is why the compromise was made to settle for this imperfect solution.
 
 Another area for improvement that could not be dealt with because it was noticed too late is that equations can be put on existential type variables as shown below :
 
