@@ -43,7 +43,7 @@ Error: This type cannot be unboxed because
        You should annotate it with [@@ocaml.boxed].
 \end{lstlisting}
 
-Determining whether a single type can contain both float values and non float is quite straightforward, however the matter becomes more complicated when dealing with several mutually recursive types. This was pointed out by user mmottl (\code{https://github.com/ocaml/ocaml/pull/606#issuecomment-248656482}) who tried code that ammounted to the following :
+Determining whether a single type can contain both float values and non float is quite straightforward, however the matter becomes more complicated when dealing with several mutually recursive types. This was pointed out by user mmottl (\code{https://github.com/ocaml/ocaml/pull/606#issuecomment-248656482}) who tried code that amounted to the following :
 
 \begin{lstlisting}
 # type ('a, 'b) t =
@@ -130,6 +130,8 @@ Types whose definition is not a single value are separable if the values are $\I
 
 Whereas if $m = \Deepsep$ it becomes
 
+\Xgabriel{a rule is missing here}
+
 \begin{mathpar}
 	\infer
 	{{(type (\alpha _i : \_) ^ I t) \in Def}
@@ -175,9 +177,11 @@ The set of definitions is well formed if every type evaluates to the mode it's s
 	{Def; \judg \G {\exists \alpha , T} m}
 \end{mathpar}
 
-For types that feature an existential variable, this variable is capable of containing both float and non float values, this means that it will never be able to be of any mode other than $\Sep$. For our purposes, we can choose to view a type $ext$ featuring an existential variable $a$ that is supposed to be of mode $m$ as a type $param$ parameterized by this variable and then check if $param$ is of mode $m$, while keeping in mind that if $param$ being of mode $m$ requires $a$ to be aything other than $\Sep$ the type cannot be safely unboxed.
+For types that feature an existential variable, this variable is capable of containing both float and non float values, this means that it will never be able to be of any mode other than $\Sep$. For our purposes, we can choose to view a type $ext$ featuring an existential variable $a$ that is supposed to be of mode $m$ as a type $T$ parameterized by this variable and then check if $T$ is of mode $m$, while keeping in mind that if $T$ being of mode $m$ requires $a$ to be aything other than $\Sep$ the type cannot be safely unboxed.
 
 \section{Implementation}
+
+\Xgabriel{Could you include the link to the implementation, the github project?}
 
 In the implementation, after defining the types to represent modes, type variables, type names, type definition bodies and type definitions, we defined base operations needed for dealing with them such as mode inclusion or mode product. Once these were defined it was possible to start dealing with the definitions, this was done at three levels :
 \begin{itemize}
@@ -186,7 +190,6 @@ In the implementation, after defining the types to represent modes, type variabl
 \item \code{check} which calls \code{check_def} on every definition from the set of definitions to check, in the event of \code{check_def} not returning an empty list, check updates the definition in question and then starts again from the first definition.
 \end{itemize}
 
-\Xgabriel{you should show the concrete signatures with types:}
 \begin{lstlisting}
 type tyvar = Var of string
 type tyname = Name of string
@@ -229,5 +232,11 @@ type 'a equations = E : bool -> ('b * int) equations
 
 A quick fix for this would be to apply the current implementation if the existential variable doesn't appear in the equations, if it appears in a type that is deepsep, assuming the existential variable to be deepsep and if the type is sep, assuming the existential variable to be sep if the type is equal to the existential variable only. The implementation in its current state is thus not quite in agreement with the actual OCaml language and slightly too demanding, however it still represents an improvement over the current system.
 
-Had time allowed for it it would also have been of interest to continue this work to its logical conclusion and actually implement this in the OCaml compiler.
+Had time allowed for it it would also have been of interest to
+continue this work to its logical conclusion and actually implement
+this in the OCaml compiler.  \Xgabriel{If you are planning to work on
+  it in the coming weeks (this is what we had discussed, although of
+  course a change of plans is fine), then you don't need to be so dark
+  in your presentation. You can say ``it couldn't be done in time for
+  this report but we are planning to work on it''.}
 \end{document}
