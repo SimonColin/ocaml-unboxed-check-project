@@ -70,7 +70,7 @@ type must_be_boxed = Any : ('a * int) constrained_t -> must_be_boxed
 \end{lstlisting}
 \footnotesize{\code{constrained_t} is only the first part of the tuple that it takes as a parameter which in the case of \code{must_be_boxed} is an existentially quantified variable}
 
-\subsection{Notations}
+\subsection{Inference rules}
 We have also defined a "product" of modes that performs according to these rules:
 
 \begin{mathpar}
@@ -141,12 +141,6 @@ Whereas if $m = \Deepsep$ it becomes
 
 \begin{mathpar}
 	\infer
-	{{(\type (\alpha _i : m_i) ^ I t = T) \in Def}
-	\\
-	\forall i \in I, \judg \G {A_i} {m.m_i}}
-	{Def;\judg \G {(A _i) ^I t} m}
-
-	\infer
 	{{(\type (\alpha _i : m _i)^I t) \in Def}
 	\\
 	{\forall i \in I, \judg \G {A _i} {m.m_i}}}
@@ -188,8 +182,11 @@ The source code of this implementation can be found at :
 \end{lstlisting}
 
 \begin{lstlisting}
-type tyvar = Var of string type tyname = Name of string type mode =
-Sep | Ind | Deepsep
+  type tyvar = Var of string
+  type tyname = Name of string
+  type mode = Sep
+  | Ind
+  | Deepsep
 
 type ty = Unit
         | Int
