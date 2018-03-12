@@ -130,11 +130,19 @@ Types whose definition is not a single value are separable if the values are $\I
 
 Whereas if $m = \Deepsep$ it becomes
 
-\Xgabriel{a rule is missing here}
+\begin{mathpar}
+	\infer
+	{{Def; \judg \G A \Deepsep}
+	\\
+	{Def; \judg \G B \Deepsep}}
+	{\judg \G {A \rightarrow B} \Deepsep}
+\end{mathpar}
+
+\bigskip
 
 \begin{mathpar}
 	\infer
-	{{(type (\alpha _i : \_) ^ I t) \in Def}
+	{{(\type (\alpha _i : \_) ^ I t) \in Def}
 	\\
 	{\judg \G {T[\alpha _i : A _i] ^ I} m}}
 	{Def;\judg \G {(A _i) ^ I t} m}
@@ -149,13 +157,12 @@ For an instance of a parameterized type to be of a given mode, its body needs to
 	{\forall i \in I, \judg \G {A _i} \Sep.m _i}}
 	{Def;\judg \G {(A _i) ^ I t} m}	
 \end{mathpar}
-\Xgabriel{I defined a macro \code{\\type} to have the right spacing (see in this rule). TODO: use it in all your rules.}
 
 If all the parameters of an abstract or not parameterized type are of the mode that they are supposed to be then this type is of the mode it's supposed to be.
 
 \begin{mathpar}
 	\infer
-	{{Def = (type (\alpha _i : m _i) ^I t _j = T _j : m _j) ^J}
+	{{Def = (\type (\alpha _i : m _i) ^I t _j = T _j : m _j) ^J}
 	\\
 	{\forall j, Def; (\alpha _i : m _i) ^I \vdash T _j : m _j}}
 	{\vdash Def}
@@ -163,7 +170,7 @@ If all the parameters of an abstract or not parameterized type are of the mode t
 
 \begin{mathpar}
 	\infer
-	{{(type (\alpha _i : m _i) t _i = \_ : m) \in Def}
+	{{(\type (\alpha _i : m _i) t _i = \_ : m) \in Def}
 	\\
 	{\forall i, Def; \judg \G (A _i) t _i : m _i}}
 	{Def; \G \vdash (A _i) t _i : m}

@@ -1,0 +1,12 @@
+
+(* unboxed example *)
+type name = Name of string [@@unboxed]
+
+let float_array = Array.create_float 10;;
+
+let int_array = Array.make 10 1;;
+
+
+let array = Array.make_float 3;;
+
+Array.set array 1 (Obj.magic 1);;
