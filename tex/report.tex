@@ -24,7 +24,6 @@ The OCaml programming language recently started allowing user to unbox single co
 \begin{lstlisting}
 type name = Name of string [@@unboxed]
 \end{lstlisting}
-{\footnotesize This type can contain float and non float values which could mean segmentation faults if unboxed.}
 
 Unfortunately a quirk of the language is that all base values (int, char, bool, ...) are stored on a single memory word except for float which is stored on two, this would be fine were it not for the fact that that the size of the fields of an array is determined by its first value. Indeed, this means that if we were to have a type that can contain both float and non float values and this type was unboxed, we would be able to achieve segmentation faults by putting both floats and non floats in the same array. This can be demonstrated by using the unsafe cast function \code{Obj.magic} as shown below :
 
