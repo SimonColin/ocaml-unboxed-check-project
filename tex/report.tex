@@ -141,23 +141,19 @@ Whereas if $m = \Deepsep$ it becomes
 
 \begin{mathpar}
 	\infer
-	{{(\type (\alpha _i : \_) ^ I t = T) \in Def}
+	{{(\type (\alpha _i : m_i) ^ I t = T) \in Def}
 	\\
-	{\judg \G {T[\alpha _i : A _i] ^ I} m}}
-	{Def;\judg \G {(A _i) ^ I t} m}
-\end{mathpar}
+	\forall i \in I, \judg \G {A_i} {m.m_i}}
+	{Def;\judg \G {(A _i) ^I t} m}
 
-For an instance of a parameterized type to be of a given mode, its body needs to be of that mode after you replace the type variables with the parameters given.
-
-\begin{mathpar}
 	\infer
 	{{(\type (\alpha _i : m _i)^I t) \in Def}
 	\\
-	{\forall i \in I, \judg \G {A _i} \Sep.m _i}}
+	{\forall i \in I, \judg \G {A _i} {m.m_i}}}
 	{Def;\judg \G {(A _i) ^ I t} m}	
 \end{mathpar}
 
-If all the parameters of an parameterized type are of the mode that they are supposed to be then this type is of the mode it's supposed to be, this holds whether the type is abstract or not.
+For an instance of a parameterized type to be of a given mode, each parameter needs to be of the mode required of the type declaration in $Def$. This holds whether the type is abstract or not.
 
 \begin{mathpar}
 	\infer
