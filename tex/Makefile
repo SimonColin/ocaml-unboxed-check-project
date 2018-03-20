@@ -1,4 +1,4 @@
-TARGETS=inference.tex report.tex
+TARGETS=inference.tex report.tex presentation.tex
 
 .PHONY: all
 all:

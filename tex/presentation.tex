@@ -1,0 +1,119 @@
+\documentclass[svgnames]{beamer}
+%\usetheme{Madrid} % My favorite!
+\usetheme{Boadilla} % Pretty neat, soft color.
+%\usetheme{default}
+%\usetheme{Warsaw}
+%\usetheme{Bergen} % This template has nagivation on the left
+% \usetheme{Frankfurt} % Similar to the default 
+%with an extra region at the top.
+% \usecolortheme{seahorse} % Simple and clean template
+%\usetheme{Darmstadt} % not so good
+% Uncomment the following line if you want %
+% page numbers and using Warsaw theme%
+% \setbeamertemplate{footline}[page number]
+%\setbeamercovered{transparent}
+\setbeamercovered{invisible}
+% To remove the navigation symbols from 
+% the bottom of slides%
+% \setbeamertemplate{navigation symbols}{} 
+% \setbeamertemplate{footline}{\hfill\insertframenumber\hfill\vspace{3mm}}
+%
+\usepackage[utf8]{inputenc}
+
+\usepackage{lib}
+
+\title{Specifying the unboxability check on mutually recursive datatypes in OCaml}
+\author{Simon Colin}
+\date{\today}
+
+\begin{document}
+
+% title slide
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% Example frame
+\begin{frame}{Frame title}
+  Frame content
+
+  \vfill
+
+  Other sentence
+\end{frame}
+
+% Example frame with code; note the [fragile] option
+\begin{frame}[fragile]{\texttt{unboxed}: example}
+\begin{lstlisting}
+type name = Name of string [@@unboxed]
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Floats vs. non-floats}
+\begin{lstlisting}
+# let array = Array.create_float 3;;
+val array : float array = [|0.; 0.; 0.|]
+# Array.set array 1 (Obj.magic 1);;
+Segmentation fault (core dumped)
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{GADTs}
+\begin{lstlisting}
+type printable =
+  | Pair : 'a * ('a -> string) -> printable
+
+type any =
+  | Any : 'a -> any
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Rejected \texttt{unboxed}}
+\begin{lstlisting}
+# type ext = E : 'a -> ext [@@unboxed]
+Error: This type cannot be unboxed because
+       it might contain both float and non-float values.
+       You should annotate it with [@@ocaml.boxed].
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\begin{lstlisting}
+# type ('a, 'b) t =
+  | R : 'a * int -> ('a, int) t
+  | I : 'a u -> ('a, int) t
+  and 'a u = U : ('a, _) t -> 'a u [@@unboxed];;
+Error: This type cannot be unboxed because
+       it might contain both float and non-float values.
+       You should annotate it with [@@ocaml.boxed].    
+\end{lstlisting}
+\end{frame}
+
+% Examples of math slides
+\begin{frame}{Base types}
+\begin{mathpar}
+\infer
+{ }
+{\judg \G {\mathsf{int}} m}  
+\end{mathpar}
+\end{frame}
+
+\begin{frame}{Value types}
+\begin{mathpar}
+\infer
+{ }
+{\judg \G {A \rightarrow B} m}
+\end{mathpar}
+\end{frame}
+
+\begin{frame}{Parametrized types}
+\begin{mathpar}
+	\infer
+	{{(\type (\alpha _i : m _i)^I t) \in Def}
+	\\
+	{\forall i \in I, \judg \G {A _i} {m.m_i}}}
+	{Def;\judg \G {(A _i) ^ I t} m}	
+\end{mathpar}
+\end{frame}
+
+\end{document}
