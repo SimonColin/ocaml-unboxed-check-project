@@ -34,19 +34,27 @@
 \end{frame}
 
 % Example frame
-\begin{frame}{Frame title}
-  Frame content
-
-  \vfill
-
-  Other sentence
+\begin{frame}{Values in OCaml}
+	Values that aren't primitives are made of a tag and the value
+	
+	\vfill
+	
+	Can unbox single constructor single value types to only store them as their value
+  
 \end{frame}
 
-% Example frame with code; note the [fragile] option
 \begin{frame}[fragile]{\texttt{unboxed}: example}
 \begin{lstlisting}
 type name = Name of string [@@unboxed]
 \end{lstlisting}
+\end{frame}
+
+\begin{frame}{Float arrays}
+	Floats are two memory words, every other primitive is one
+	
+	\vfill
+	
+	Float arrays and non float arrays have different field sizes
 \end{frame}
 
 \begin{frame}[fragile]{Floats vs. non-floats}
@@ -59,6 +67,8 @@ Segmentation fault (core dumped)
 \end{frame}
 
 \begin{frame}[fragile]{GADTs}
+	OCaml has GADTs with which we can create a type that can contain values of any type
+	\vfill
 \begin{lstlisting}
 type printable =
   | Pair : 'a * ('a -> string) -> printable
@@ -66,6 +76,8 @@ type printable =
 type any =
   | Any : 'a -> any
 \end{lstlisting}
+	\vfill
+	Should we unbox such a type we would get segmentation faults
 \end{frame}
 
 \begin{frame}[fragile]{Rejected \texttt{unboxed}}
@@ -75,9 +87,15 @@ Error: This type cannot be unboxed because
        it might contain both float and non-float values.
        You should annotate it with [@@ocaml.boxed].
 \end{lstlisting}
+	\vfill
+
+	OCaml rightly rejects such types if we try to unbox them
 \end{frame}
 
 \begin{frame}[fragile]
+	However it also rejects types that should be unboxable
+	
+	\vfill
 \begin{lstlisting}
 # type ('a, 'b) t =
   | R : 'a * int -> ('a, int) t
@@ -89,31 +107,164 @@ Error: This type cannot be unboxed because
 \end{lstlisting}
 \end{frame}
 
-% Examples of math slides
-\begin{frame}{Base types}
-\begin{mathpar}
-\infer
-{ }
-{\judg \G {\mathsf{int}} m}  
-\end{mathpar}
+\begin{frame}{Modes}
+	To decide whether types can be unboxed we used a typing system
+	
+	\vfill
+	
+	$\Sep$ means that the type can either only contain floats or only non floats
+	
+	\vfill
+	
+	$\Ind$ means that we don't assert anything about the type
+	
+	\vfill
+	
+	This means that $\Sep$ $\subset$ $\Ind$ 
 \end{frame}
 
-\begin{frame}{Value types}
-\begin{mathpar}
-\infer
-{ }
-{\judg \G {A \rightarrow B} m}
-\end{mathpar}
+\begin{frame}{The judgements}
+
+	If all the types evaluate to the mode they are supposed to be the set of the definitions is well formed
+	
+	\vfill
+	
+	If this is not the case there exists an offending definition that isn't of the right mode
+
 \end{frame}
 
-\begin{frame}{Parametrized types}
-\begin{mathpar}
+\begin{frame}{Some rules}
+
+	\begin{mathpar}
 	\infer
-	{{(\type (\alpha _i : m _i)^I t) \in Def}
+	{ }
+	{\judg \G {int} m}
+	\end{mathpar}
+	
+	Base types are of all modes
+	
+	\vfill
+	
+	\begin{mathpar}
+	
+	\infer
+	{{Def; \judg \G A Sep}
 	\\
-	{\forall i \in I, \judg \G {A _i} {m.m_i}}}
-	{Def;\judg \G {(A _i) ^ I t} m}	
-\end{mathpar}
+	{Def; \judg \G B Sep}}
+	{\judg \G {A \times B} Sep}	
+	
+	\end{mathpar}
+	
+	A pair of values cannot be a float so it is $\Sep$
+	
+	\vfill
+
+\end{frame}
+
+\begin{frame}{Parameterized types}
+
+	\begin{mathpar}
+	\infer
+	{{(type(\alpha _i : m _i) ^I t) \in Def}
+	\\
+	{\forall i \in I, \judg \G {A _i} m.m _i}}
+	{Def;\judg \G {(A _i) ^ I t} m}
+	\end{mathpar}
+	
+	\vfill
+	
+	We define a product of modes such that
+	
+	\begin{mathpar}
+	
+	m . m = m
+	
+	\Sep . \Ind = \Ind . \Sep = \Ind
+	
+	\end{mathpar}
+
+\end{frame}
+
+\begin{frame}{Existential types}
+
+	\begin{mathpar}
+	\infer
+	{Def; \G, \alpha : \Ind \vdash T:m}
+	{Def; \judg \G {\exists \alpha , T} m}
+	\end{mathpar}
+	
+	\vfill
+	
+	An existentially quantified variable can never be $\Sep$ 
+	
+	Types featuring one can only be $\Sep$ only if that doesn't require the existential variable to be $\Sep$
+
+\end{frame}
+
+\begin{frame}{Fixpoint}
+
+	If we apply the rules to work our way up we get a list of type variables and the modes that they should be
+	
+	\vfill
+	
+	If a type doesn't evaluate to the mode we need it to be we know which type variables need to change mode
+	
+	\vfill
+	
+	If we're trying to unbox an type that isn't unboxable we can raise an error
+
+\end{frame}
+
+\begin{frame}{The implementation}
+
+	\begin{lstlisting}
+ 	 type tyvar = Var of string
+ 	 type tyname = Name of string
+  	type mode = Sep | Ind | Deepsep
+
+	type ty = Unit | Int| Float | ...
+
+	type def = Def of (tyvar * mode) list * tyname * ty * mode
+
+	val check_type : ty -> def list -> mode -> (tyvar * mode) list
+	val check_def : def -> def list -> mode -> (tyvar * mode) list
+	val check : def list -> def list
+	\end{lstlisting}
+	
+	An implementation of the rules was made and tested on various examples where it performed as expected
+
+\end{frame}
+
+\begin{frame}[fragile]{$\Deepsep$}
+
+\begin{lstlisting}
+type 'a constrained_t = 'b constraint 'a = 'b * int
+
+type must_be_boxed = Any : ('a * int) constrained_t -> must_be_boxed
+\end{lstlisting}
+
+	\vfill
+	
+	OCaml also has constraints that allow to extract values from types
+	
+	\vfill
+	
+	If a type is constrained we require it to be $\Deepsep$
+	
+	\vfill
+	
+	A type is $\Deepsep$ if it is a base type or it is made of only $\Deepsep$ types
+
+\end{frame}
+
+\begin{frame}{Work done}
+
+	The inference rules were worked out with Gabriel Scherer.
+	
+	\vfill
+	
+	The implementation, report and presentation were made by me with advice from Gabriel Scherer
+
 \end{frame}
 
 \end{document}
