@@ -1,4 +1,4 @@
-\documentclass[svgnames]{beamer}
+\documentclass[svgnames,colorlinks]{beamer}
 %\usetheme{Madrid} % My favorite!
 \usetheme{Boadilla} % Pretty neat, soft color.
 %\usetheme{default}
@@ -15,15 +15,19 @@
 \setbeamercovered{invisible}
 % To remove the navigation symbols from 
 % the bottom of slides%
-% \setbeamertemplate{navigation symbols}{} 
+\setbeamertemplate{navigation symbols}{} 
 % \setbeamertemplate{footline}{\hfill\insertframenumber\hfill\vspace{3mm}}
 %
 \usepackage[utf8]{inputenc}
 
+\usepackage{cancel}
+
 \usepackage{lib}
+\lstset{xleftmargin=1em}
 
 \title{Specifying the unboxability check on mutually recursive datatypes in OCaml}
-\author{Simon Colin}
+\author{\textbf{Simon Colin}\\
+with Gabriel Scherer (Parsifal)}
 \date{\today}
 
 \begin{document}
@@ -34,41 +38,42 @@
 \end{frame}
 
 % Example frame
-\begin{frame}{Values in OCaml}
-	Values that aren't primitives are made of a tag and the value
+\begin{frame}[fragile]{Unboxed constructors in OCaml}
+Values that aren't primitives are made of a tag and the value
 	
-	\vfill
+\vfill
 	
-	Can unbox single constructor single value types to only store them as their value
-  
-\end{frame}
+Can unbox single constructor single value types to only store them as their value
 
-\begin{frame}[fragile]{\texttt{unboxed}: example}
+\vfill
+  
 \begin{lstlisting}
 type name = Name of string [@@unboxed]
 \end{lstlisting}
 \end{frame}
 
-\begin{frame}{Float arrays}
-	Floats are two memory words, every other primitive is one
+\begin{frame}[fragile]{Float arrays}
+Floats are two memory words, every other primitive is one
 	
-	\vfill
+\vfill
 	
-	Float arrays and non float arrays have different field sizes
-\end{frame}
+Float arrays and non float arrays have different field sizes
 
-\begin{frame}[fragile]{Floats vs. non-floats}
+\vfill
+
 \begin{lstlisting}
-# let array = Array.create_float 3;;
+# let array = Array.make 3 0.0;;
 val array : float array = [|0.; 0.; 0.|]
-# Array.set array 1 (Obj.magic 1);;
+# Array.set array 1 (Obj.magic true);;
 Segmentation fault (core dumped)
 \end{lstlisting}
 \end{frame}
 
 \begin{frame}[fragile]{GADTs}
-	OCaml has GADTs with which we can create a type that can contain values of any type
-	\vfill
+Existentially quantified type variables.
+
+\vfill
+
 \begin{lstlisting}
 type printable =
   | Pair : 'a * ('a -> string) -> printable
@@ -76,13 +81,22 @@ type printable =
 type any =
   | Any : 'a -> any
 \end{lstlisting}
-	\vfill
-	Should we unbox such a type we would get segmentation faults
+
+\vfill
+
+Should we unbox \texttt{any} we would get segmentation faults
+
+\begin{lstlisting}
+# let array = Array.make 2 (Any 0.0);;
+val array : any array = [|Any <poly>; Any <poly>|]
+# Array.set array 1 (Any true);;
+Segmentation fault (core dumped)
+\end{lstlisting}
 \end{frame}
 
 \begin{frame}[fragile]{Rejected \texttt{unboxed}}
 \begin{lstlisting}
-# type ext = E : 'a -> ext [@@unboxed]
+# type any = Any : 'a -> any [@@unboxed]
 Error: This type cannot be unboxed because
        it might contain both float and non-float values.
        You should annotate it with [@@ocaml.boxed].
@@ -93,7 +107,7 @@ Error: This type cannot be unboxed because
 \end{frame}
 
 \begin{frame}[fragile]
-	However it also rejects types that should be unboxable
+  However OCaml also rejects types that should be unboxable
 	
 	\vfill
 \begin{lstlisting}
@@ -105,61 +119,219 @@ Error: This type cannot be unboxed because
        it might contain both float and non-float values.
        You should annotate it with [@@ocaml.boxed].    
 \end{lstlisting}
+
+\vfill
+
+\url{https://caml.inria.fr/mantis/view.php?id=7364}
 \end{frame}
 
-\begin{frame}{Modes}
-	To decide whether types can be unboxed we used a typing system
-	
-	\vfill
-	
-	$\Sep$ means that the type can either only contain floats or only non floats
-	
-	\vfill
-	
-	$\Ind$ means that we don't assert anything about the type
-	
-	\vfill
-	
-	This means that $\Sep$ $\subset$ $\Ind$ 
+\begin{frame}{My project}
+
+Formalize the correctness condition for \texttt{[@@unboxed]}:
+
+design a system of inference rules
+
+\vfill
+
+Prototype implementation
+
+\vfill
+
+Feburary 15th: visit to Damien Doligez \textcolor{gray}{(previous impl.)}
+
+-- he liked the proposal.
+
+\vfill
+
+(no compiler patch yet)
 \end{frame}
 
-\begin{frame}{The judgements}
+\begin{frame}[fragile]{Modes}
+We propose a system of inference rules
 
-	If all the types evaluate to the mode they are supposed to be the set of the definitions is well formed
-	
-	\vfill
-	
-	If this is not the case there exists an offending definition that isn't of the right mode
+\begin{mathpar}
+\judg {\Def; \G} A m
+
+\begin{array}{l@{\quad\gramdef\quad}l}
+  m & \Sep \mid \Ind
+\end{array}
+\end{mathpar}
+
+\vfill
+
+$\Sep$ means that the type can either only contain floats or only non floats
+
+\vfill
+
+$\Ind$ means that we don't assert anything about the type
+
+\vfill
+
+\begin{lstlisting}[xleftmargin=8.8em]
+type ('a, 'b) t = 'a
+\end{lstlisting}
+\begin{mathpar}
+\type (\alpha : \Sep, \beta : \Ind)~t \ =\  \alpha
+\end{mathpar}
+\end{frame}
+
+\begin{frame}{Judgments}
+
+\begin{mathpar}
+\vdash Def  
+
+\judg {\Def; \G} A m
+
+\\
+\\
+\\
+
+\begin{array}{l@{\quad\gramdef\quad}l}
+  m & \Sep \mid \Ind
+  \\[1em]
+  A,B & \alpha \mid \mathsf{int} \mid A \to B \mid (A_i)^{i \in I} t \mid \exists \alpha. A
+  \\[1em]
+  \Def & \emptyset \mid Def, \type (\alpha_i : m_i)^{i \in I} t = A
+\end{array}
+\end{mathpar}
 
 \end{frame}
 
-\begin{frame}{Some rules}
+\begin{frame}
+\begin{mathpar}
+\infer
+{ }
+{\judg \G {int} m}
+\end{mathpar}
+
+Base types are of all modes
+
+\vfill
+
+\begin{mathpar}	
+\infer
+{ }
+{\judg \G {A \times B} m}	
+\end{mathpar}
+
+A pair of values cannot be a float so it is $\Sep$ (or $\Ind$)
+
+\vfill
+
+\begin{mathpar}
+\infer
+{(\alpha : m) \in \G}
+{\judg {\Def; \G} \alpha m}
+\end{mathpar}
+
+The context $\G$ stores the modes of type variables (type parameters).
+
+\vfill
+\end{frame}
+
+\begin{frame}{Existential types}
 
 	\begin{mathpar}
 	\infer
-	{ }
-	{\judg \G {int} m}
+	{\Def; \G, \alpha : \Ind \vdash A:m}
+	{\Def; \judg \G {\exists \alpha. A} m}
 	\end{mathpar}
-	
-	Base types are of all modes
 	
 	\vfill
 	
-	\begin{mathpar}
-	
-	\infer
-	{{Def; \judg \G A Sep}
-	\\
-	{Def; \judg \G B Sep}}
-	{\judg \G {A \times B} Sep}	
-	
-	\end{mathpar}
-	
-	A pair of values cannot be a float so it is $\Sep$
-	
-	\vfill
+	Types featuring $\exists \alpha.$ can only be $\Sep$ if that doesn't require $\alpha$ to be $\Sep$
 
+        \begin{mathpar}
+          {Def; \G} \vdash {\exists \alpha. \alpha} : \Ind
+
+          \cancel{{Def; \G} \vdash {\exists \alpha. \alpha} : \Sep}
+
+          {Def; \G} \vdash {\exists \alpha. (\alpha \times (\alpha \to \mathsf{string}))} : \Sep
+        \end{mathpar}
 \end{frame}
+
+\begin{frame}{Fixpoint}
+$\Def$: how to guess the parameter modes?
+
+$\Longrightarrow$ start with $\Ind$ everywhere
+
+
+\begin{mathpar}
+\judg {\Def; \G} A m
+
+\vdash Def  
+\end{mathpar}
+
+We apply the rules to work our way up
+% If we apply the rules to work our way up we get a list of type variables and the modes that they should be
+	
+\vfill
+	
+If a type doesn't evaluate to the mode we need it to be
+
+we know which type variables (parameters) need to change mode
+	
+\vspace{1em}
+
+$\Longrightarrow$ repeat until we reach fixpoint
+
+\vfill
+	
+Unboxing is allowed only if the type definition is $\Sep$
+\end{frame}
+
+\begin{frame}[fragile]{Implementation}
+
+\url{https://github.com/SimonColin/ocaml-unboxed-check-project}
+
+\begin{lstlisting}
+type tyvar = Var of string
+type tyname = Name of string
+type mode = Sep | Ind | Deepsep
+
+type ty = Unit | Int| Float | ...
+
+type def = Def of (tyvar * mode) list * tyname * ty * mode
+
+val check_type :
+  ty -> def list -> mode -> (tyvar * mode) list
+val check_def :
+  def -> def list -> mode -> (tyvar * mode) list
+val check :
+  def list -> def list
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Not in this talk}
+
+\begin{itemize}
+\item third mode \texttt{deepsep}
+\item GADT equations (not handled yet)
+\end{itemize}
+
+\vfill
+
+See the report.
+\end{frame}
+
+\begin{frame}{Work done}
+
+The inference rules were worked out together with Gabriel Scherer.
+
+\vfill
+
+The implementation, report and presentation were made by me
+
+with advice from Gabriel Scherer.
+
+\vfill
+
+\begin{center}
+  Thanks. Any question?
+\end{center}
+\end{frame}
+
+\frame{}
 
 \begin{frame}{Parameterized types}
 
@@ -168,7 +340,7 @@ Error: This type cannot be unboxed because
 	{{(type(\alpha _i : m _i) ^I t) \in Def}
 	\\
 	{\forall i \in I, \judg \G {A _i} m.m _i}}
-	{Def;\judg \G {(A _i) ^ I t} m}
+	{\Def;\judg \G {(A _i) ^ I t} m}
 	\end{mathpar}
 	
 	\vfill
@@ -185,86 +357,5 @@ Error: This type cannot be unboxed because
 
 \end{frame}
 
-\begin{frame}{Existential types}
-
-	\begin{mathpar}
-	\infer
-	{Def; \G, \alpha : \Ind \vdash T:m}
-	{Def; \judg \G {\exists \alpha , T} m}
-	\end{mathpar}
-	
-	\vfill
-	
-	An existentially quantified variable can never be $\Sep$ 
-	
-	Types featuring one can only be $\Sep$ only if that doesn't require the existential variable to be $\Sep$
-
-\end{frame}
-
-\begin{frame}{Fixpoint}
-
-	If we apply the rules to work our way up we get a list of type variables and the modes that they should be
-	
-	\vfill
-	
-	If a type doesn't evaluate to the mode we need it to be we know which type variables need to change mode
-	
-	\vfill
-	
-	If we're trying to unbox an type that isn't unboxable we can raise an error
-
-\end{frame}
-
-\begin{frame}{The implementation}
-
-	\begin{lstlisting}
- 	 type tyvar = Var of string
- 	 type tyname = Name of string
-  	type mode = Sep | Ind | Deepsep
-
-	type ty = Unit | Int| Float | ...
-
-	type def = Def of (tyvar * mode) list * tyname * ty * mode
-
-	val check_type : ty -> def list -> mode -> (tyvar * mode) list
-	val check_def : def -> def list -> mode -> (tyvar * mode) list
-	val check : def list -> def list
-	\end{lstlisting}
-	
-	An implementation of the rules was made and tested on various examples where it performed as expected
-
-\end{frame}
-
-\begin{frame}[fragile]{$\Deepsep$}
-
-\begin{lstlisting}
-type 'a constrained_t = 'b constraint 'a = 'b * int
-
-type must_be_boxed = Any : ('a * int) constrained_t -> must_be_boxed
-\end{lstlisting}
-
-	\vfill
-	
-	OCaml also has constraints that allow to extract values from types
-	
-	\vfill
-	
-	If a type is constrained we require it to be $\Deepsep$
-	
-	\vfill
-	
-	A type is $\Deepsep$ if it is a base type or it is made of only $\Deepsep$ types
-
-\end{frame}
-
-\begin{frame}{Work done}
-
-	The inference rules were worked out with Gabriel Scherer.
-	
-	\vfill
-	
-	The implementation, report and presentation were made by me with advice from Gabriel Scherer
-
-\end{frame}
 
 \end{document}

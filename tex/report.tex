@@ -165,6 +165,8 @@ The set of definitions is well formed if every type evaluates to the mode it's s
 	{Def; \judg \G {\exists \alpha , T} m}
 \end{mathpar}
 
+% TODO: add the variable rule
+
 For types that feature an existential variable, this variable is capable of containing both float and non float values, this means that it will never be able to be of any mode other than $\Sep$. For our purposes, we can choose to view a type $ext$ featuring an existential variable $a$ that is supposed to be of mode $m$ as a type $T$ parameterized by this variable and then check if $T$ is of mode $m$, while keeping in mind that if $T$ being of mode $m$ requires $a$ to be aything other than $\Ind$ the type cannot be safely unboxed.
 
 \section{Implementation}
